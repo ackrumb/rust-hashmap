@@ -3,13 +3,14 @@ use std::hash::{Hash, Hasher};
 
 const NUM_BUCKETS: usize = 16;
 
-type Bucket = Vec<(String, String)>;
+type Slot<K,V> = (K, V);
+type Bucket<K,V> = Vec<Slot<K,V>>;
 
-pub struct HashMap {
-  buckets: Vec<Bucket>,
+pub struct HashMap<K, V> {
+  buckets: Vec<Bucket<K,V>>,
 }
 
-impl HashMap {
+impl<K: PartialEq + Hash, V> HashMap<K, V> {
   pub fn new() -> Self {
     let mut buckets = Vec::new();
     for _ in 0..NUM_BUCKETS {
@@ -18,26 +19,40 @@ impl HashMap {
     Self { buckets }
   }
 
-  pub fn find_bucket(key: &String) -> usize {
+  pub fn find_bucket(&self, key: &K) -> usize {
     let mut hasher = DefaultHasher::new();
-    hasher.write(key.as_bytes());
+    key.hash(&mut hasher);
     let hash = hasher.finish();
-
     (hash % NUM_BUCKETS as u64) as usize
   }
 
-  pub fn insert(&mut self, key: &str, value: &str) -> Option<&str> {
-    let maybe_value = self.get(key);
-    if maybe_value != None {
-      return maybe_value;
-    } else {
-      let key2 = String::from(key);
-      let bucket_index = HashMap::find_bucket(&key2);
-      // if we didn't find it, push it
-      let value2 = String::from(value);
-      self.buckets[bucket_index].push((key2, value2));
-      None
+  pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+    let bucket_index = self.find_bucket(&key);
+    let slot: Option<&mut Slot<K,V>> = self.buckets[bucket_index] //type annotation not necessary
+      .iter_mut()
+      .find(|(k, _)| k == &key);
+    match slot {
+      Some(s) => {
+        let (_, value) = std::mem::replace(s, (key, value));
+        Some(value)
+      }
+        None => 
+        {
+          self.buckets[bucket_index].push((key, value));
+          None
+        }
     }
+    // let maybe_value = self.get(key);
+    // if maybe_value != None {
+    //   return maybe_value;
+    // } else {
+    //   let key2 = String::from(key);
+    //   let bucket_index = HashMap::find_bucket(&key2);
+    //   // if we didn't find it, push it
+    //   let value2 = String::from(value);
+    //   self.buckets[bucket_index].push((key2, value2));
+    //   None
+    // }
 
     // for i in 0..self.buckets[bucket_index].len() {
     //   let (k, v) = &self.buckets[bucket_index][i];
@@ -57,15 +72,14 @@ impl HashMap {
     // None
   }
 
-  pub fn get(&self, key: &str) -> Option<&str> {
+  pub fn get(&self, key: &K) -> Option<&V> {
     // Hash value
-    let key2 = String::from(key);
-    let bucket_index = HashMap::find_bucket(&key2);
+    let bucket_index = self.find_bucket(&key);
     // Go thru vector
     for elt in &self.buckets[bucket_index] {
       let (k, v) = elt;
-      if k.eq(&key2) {
-        return Some(&v.as_str());
+      if k.eq(&key) {
+        return Some(&v);
       }
     }
     None
